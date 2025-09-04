@@ -46,8 +46,8 @@
 
 1. **克隆專案**
 ```bash
-git clone <repository-url>
-cd wan2_2_i2v
+git clone https://github.com/CreateIntelligens/wan2.2_image2video.git
+cd wan2.2_image2video
 ```
 
 2. **配置環境**
@@ -131,7 +131,7 @@ http://localhost:5005
 ## 📁 專案結構
 
 ```
-wan2_2_i2v/
+wan2.2_image2video/
 ├── docker-compose.yaml              # Docker 編排配置
 ├── .env                            # 環境變數配置
 ├── .gitignore                      # Git 忽略文件
