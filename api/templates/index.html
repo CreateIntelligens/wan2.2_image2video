@@ -47,8 +47,12 @@
             </label>
           </div>
 
-          <label class="section-title">提示詞 <span class="subtle">(詳細描述幫助生成)</span></label>
+          <div class="row" style="align-items:center;justify-content:space-between">
+            <label class="section-title" style="margin:0">提示詞 <span class="subtle">(詳細描述幫助生成)</span></label>
+            <button type="button" id="btnExpandPrompt" class="btn ghost small" style="padding:6px 12px;font-size:14px"><i class="fa-solid fa-wand-magic-sparkles"></i> 提示詞擴寫</button>
+          </div>
           <textarea class="input" id="prompt" name="prompt" rows="4" placeholder="請描述您想要生成的影片內容，例如：女孩對著鏡頭微笑" required></textarea>
+          <div id="expandStatus" class="small subtle" style="margin-top:6px;display:none"></div>
 
           <div style="height:10px"></div>
           
@@ -308,6 +312,30 @@
       loadRecentTasks();
       updateQueueStatus();
       setInterval(updateQueueStatus, 5000);
+      const btn = document.getElementById('btnExpandPrompt');
+      const promptEl = document.getElementById('prompt');
+      const expandStatus = document.getElementById('expandStatus');
+      if(btn){
+        btn.addEventListener('click', async ()=>{
+          const original = promptEl.value.trim();
+          if(!original){ showToast('請先輸入簡短想法'); return; }
+          btn.disabled = true; btn.textContent='擴寫中...'; expandStatus.style.display='block'; expandStatus.textContent='正在向模型請求擴寫...';
+          try{
+            const resp = await fetch('/api/expand-prompt',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:original})});
+            const data = await resp.json();
+            if(data.success){
+              promptEl.value = data.expanded;
+              expandStatus.textContent='已擴寫';
+              showToast('已完成擴寫');
+            }else{ throw new Error(data.error||'擴寫失敗'); }
+          }catch(e){
+            expandStatus.textContent='錯誤：'+ e.message;
+            showToast(e.message,'danger');
+          }finally{
+            btn.disabled=false; btn.innerHTML='<i class="fa-solid fa-wand-magic-sparkles"></i> 提示詞擴寫';
+          }
+        });
+      }
     });
   </script>
 </body>

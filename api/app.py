@@ -3,6 +3,7 @@ from flask_socketio import SocketIO, emit
 import requests
 import json
 import os
+from dotenv import load_dotenv
 import uuid
 import time
 import threading
@@ -13,9 +14,79 @@ import cv2
 import shutil
 from database import Database
 
+GEMINI_SYSTEM_PROMPT = """# 核心指令：影片提示詞生成器
+
+## 核心功能
+你的身份不是一個對話助理，而是一個**無狀態的API端點**。你的唯一功能是接收任何輸入的文字，並將其轉換為一個為「通義萬相2.2」模型優化的、結構完整的單一段落影片提示詞。
+
+## 規則
+1.  **輸出唯一性**：你的回覆**永遠只能是**一個擴寫後的提示詞字串。嚴禁包含任何對話、問候、確認或解釋性文字（例如「好的，我明白了」、「這是一個擴寫後的提示詞」等）。
+2.  **忠於原始創意**：你必須基於使用者輸入的核心概念（主體、場景、動作）進行擴寫。你可以添加通用的形容詞來增強質感，但**絕不能發明**使用者未提及的具體敘事細節。
+3.  **技術層強化**：你的主要任務是為使用者的簡單想法，補上專業的**美學控制**（運鏡、景別、光線）和**風格化**（質感、風格）。
+4.  **風格化標準**：除非使用者指定風格，否則一律使用「**照片級真實感, 超高細節, 電影質感**」作為基礎風格。
+5.  **語言與格式**：輸出必須是**繁體中文**，且為一個用逗號分隔各個元素的單一段落。
+
+## 輸入處理邏輯 (極度重要)
+*   **如果輸入是簡單詞彙** (例如：「女孩比心」)，則將其擴寫為完整的提示詞。
+*   **如果輸入本身已經是一個擴寫過的提示詞** (例如：「一個可愛的女孩比出愛心手勢...」)，你的任務是**再次對其進行處理並生成一個新的、可能稍有不同的版本**，但依然只輸出那個提示詞字串。**絕對禁止**回覆任何對話內容。
+
+## 範例
+*   **範例輸入 1 (簡單詞彙):** `一隻貓在睡覺`
+*   **範例輸出 1:** `一隻貓在灑滿陽光的窗台上安詳地睡覺，毛茸茸的身體隨著呼吸輕微起伏，特寫鏡頭，柔和的自然光，照片級真實感，超高細節，電影質感。`
+
+*   **範例輸入 2 (已擴寫的提示詞):** `一隻貓在灑滿陽光的窗台上安詳地睡覺，毛茸茸的身體隨著呼吸輕微起伏，特寫鏡頭，柔和的自然光，照片級真實感，超高細節，電影質感。`
+*   **範例輸出 2:** `鏡頭緩慢推進，一隻熟睡的貓躺在木質窗台上，陽光勾勒出牠金色的輪廓，畫面溫馨寧靜，淺景深，電影級光效，照片級真實感，超高細節，電影質感。`
+
+現在，直接處理接下來的任何輸入。
+"""
+
+load_dotenv()
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
 socketio = SocketIO(app, cors_allowed_origins="*")
+
+# 可配置的 ComfyUI 輸出目錄（容器內掛載位置），預設使用 docker-compose 掛載的 /app/comfyui_output
+COMFYUI_OUTPUT_DIR = os.getenv('COMFYUI_OUTPUT_DIR', '/app/comfyui_output')
+
+@app.route('/api/expand-prompt', methods=['POST'])
+def expand_prompt():
+    # 動態讀取，避免容器啟動前未載入或後續更改不生效
+    gemini_key = os.getenv('GEMINI_API_KEY')
+    if not gemini_key:
+        return jsonify({'error': '伺服器未設定 GEMINI_API_KEY'}), 500
+    data = request.get_json(silent=True) or {}
+    user_text = (data.get('text') or '').strip()
+    if not user_text:
+        return jsonify({'error': '缺少要擴寫的文字'}), 400
+
+    try:
+        payload = {
+            "contents": [
+                {"role": "user", "parts": [
+                    {"text": f"{GEMINI_SYSTEM_PROMPT}\n\n使用者原始輸入：{user_text}"}
+                ]}
+            ],
+            "generationConfig": {"temperature": 0.9, "topK": 40, "topP": 0.95, "maxOutputTokens": 512}
+        }
+        headers = {"Content-Type": "application/json", "x-goog-api-key": gemini_key}
+        resp = requests.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+            headers=headers,
+            json=payload,
+            timeout=30
+        )
+        if resp.status_code != 200:
+            return jsonify({'error': f'Gemini API 錯誤: {resp.status_code}'}), 502
+        data = resp.json()
+        # 解析回傳文字
+        out = ''
+        try:
+            out = data['candidates'][0]['content']['parts'][0]['text'].strip()
+        except Exception:
+            out = json.dumps(data)[:400]
+        return jsonify({'success': True, 'expanded': out})
+    except Exception as e:
+        return jsonify({'error': f'擴寫失敗: {str(e)}'}), 500
 
 # Favicon route: prefer an existing ICO, otherwise convert PNG to ICO on the fly
 @app.route('/favicon.ico')
@@ -230,10 +301,7 @@ def monitor_task(task_id, prompt_id):
                     if video_filename:
                         # 檢查ComfyUI輸出目錄中的影片檔案
                         # 首先嘗試掛載的目錄
-                        comfyui_video_path = f"/app/comfyui_output/{video_filename}"
-                        # 如果掛載目錄不存在，嘗試直接路徑
-                        if not os.path.exists(comfyui_video_path):
-                            comfyui_video_path = f"/home/hank/comfy/ComfyUI/output/{video_filename}"
+                        comfyui_video_path = os.path.join(COMFYUI_OUTPUT_DIR, video_filename)
                         
                         output_path = f"/app/output/{task_id}_{video_filename}"
                         
@@ -285,7 +353,7 @@ def monitor_task(task_id, prompt_id):
                         print(f"[DEBUG] Task {task_id}: No video filename found in outputs")
                         # 備用檢測：掃描ComfyUI輸出目錄中的最新文件
                         try:
-                            comfyui_output_dir = "/home/hank/comfy/ComfyUI/output"
+                            comfyui_output_dir = COMFYUI_OUTPUT_DIR
                             if os.path.exists(comfyui_output_dir):
                                 # 獲取所有wan22開頭的mp4文件，按修改時間排序
                                 output_files = []
@@ -888,7 +956,7 @@ def recover_stuck_tasks():
             
             # 查找ComfyUI輸出目錄中最新的文件
             try:
-                comfyui_output_dir = "/home/hank/comfy/ComfyUI/output"
+                comfyui_output_dir = COMFYUI_OUTPUT_DIR
                 if os.path.exists(comfyui_output_dir):
                     # 獲取所有wan22開頭的mp4文件，按修改時間排序
                     output_files = []

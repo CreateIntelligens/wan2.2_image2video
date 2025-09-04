@@ -14,13 +14,15 @@ services:
       - ./database:/app/database                                     # 資料庫
       - ./wan2.2_i2v_14b_single.json:/app/workflow.json:ro         # workflow模板
       - ./wan2_2_i2v_14b_first_last.json:/app/workflow_first_last.json:ro  # 首尾幀workflow模板
-      - ${COMFYUI_PATH:-/home/hank/comfy/ComfyUI}/input:/app/comfyui_input
-      - ${COMFYUI_PATH:-/home/hank/comfy/ComfyUI}/output:/app/comfyui_output
+      - ${COMFYUI_PATH}/input:/app/comfyui_input
+      - ${COMFYUI_PATH}/output:/app/comfyui_output
     environment:
       - COMFYUI_HOST=host.docker.internal
       - COMFYUI_PORT=8188
       - FLASK_ENV=production
       - DATABASE_PATH=/app/database/history.db
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - COMFYUI_OUTPUT_DIR=/app/comfyui_output
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

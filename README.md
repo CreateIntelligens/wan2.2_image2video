@@ -27,6 +27,7 @@
 - 📚 **歷史記錄**：完整的生成歷史和搜尋功能
 - 🎥 **影片播放**：內建影片播放器和下載功能
 - 🖼️ **縮圖預覽**：自動生成影片縮圖
+- 🪄 **提示詞擴寫**：一鍵使用 Gemini 2.0 Flash 擴寫簡短想法為電影級提示詞
 
 ### 技術特色
 - 🐳 **Docker 容器化**：一鍵部署，環境隔離
@@ -167,7 +168,29 @@ wan2.2_image2video/
 ```bash
 # ComfyUI 安裝路徑
 COMFYUI_PATH=/path/to/your/ComfyUI
+GEMINI_API_KEY=你的Gemini金鑰  # 啟用提示詞擴寫所需
 ```
+
+#### 進階（可選）
+```bash
+# 指向容器內掛載的 ComfyUI output 目錄（通常不需要改）
+COMFYUI_OUTPUT_DIR=/app/comfyui_output
+
+# 覆寫預設連線（若不是 host.docker.internal:8188）
+COMFYUI_HOST=host.docker.internal
+COMFYUI_PORT=8188
+
+# SQLite 資料庫檔案位置（容器內路徑）
+DATABASE_PATH=/app/database/history.db
+
+# Flask 執行環境 (development / production)
+FLASK_ENV=production
+```
+
+說明：
+- `COMFYUI_PATH` 只在 docker-compose 掛載卷時使用，不再內建主機路徑 fallback，避免洩漏本機目錄結構。
+- `COMFYUI_OUTPUT_DIR` 讓程式避免硬編碼實體主機路徑，所有輸出檢索統一走該變數。
+- 若修改 `.env` 後未生效，請重新執行：`docker-compose up -d --build`。
 
 ### Docker Compose 配置
 
@@ -252,6 +275,40 @@ Response:
 - `task_failed`：任務失敗通知
 - `queue_update`：排隊狀態更新
 
+## 🪄 提示詞擴寫功能
+
+首頁「提示詞」欄位旁新增「提示詞擴寫」按鈕：
+
+1. 使用者先輸入簡短構想（例如：`貓咪在草地上打滾`）。
+2. 點擊「提示詞擴寫」，前端呼叫 `/api/expand-prompt`。
+3. 後端組合系統提示 (`GEMINI_SYSTEM_PROMPT`) 與使用者輸入，呼叫 Gemini 2.0 Flash `generateContent` API。
+4. 回傳的單段繁體中文電影級提示詞覆蓋原輸入框內容。
+
+若未配置 `GEMINI_API_KEY` 會返回錯誤提示。
+
+範例環境變數：
+```env
+GEMINI_API_KEY=AIza...your_key
+```
+
+API：
+```
+POST /api/expand-prompt
+Body: { "text": "原始簡短想法" }
+Response: { success: true, expanded: "擴寫後提示詞" }
+```
+
+### 常見錯誤
+| 問題 | 原因 | 解法 |
+|------|------|------|
+| `伺服器未設定 GEMINI_API_KEY` | 容器內沒讀到環境變數 | 確認 `.env` 有寫 & `docker-compose.yml` 的 `environment:` 有 `GEMINI_API_KEY=${GEMINI_API_KEY}`，然後重新 build 啟動 |
+| `Gemini API 錯誤: 4xx/5xx` | 金鑰無效 / 配額問題 | 到 Google AI Studio 檢查金鑰 / 配額 / 區域限制 |
+| 回傳 JSON 而非文字 | Google API 回傳結構異常 | 可能模型異常或輸入超限制，稍後重試 |
+
+### 安全建議
+- 若部署於公開環境，請在反向代理層限制 `/api/expand-prompt` 的頻率（例如 Nginx rate limit）。
+- 建議不要在前端暴露金鑰；目前實作已完全由後端代呼叫。
+
 ## 🛠️ 故障排除
 
 ### 常見問題
@@ -307,6 +364,16 @@ docker-compose logs --since="1h" comfyui-api
 3. **並發處理**：系統設計為單任務處理，避免資源競爭
 
 ## 🔄 更新日誌
+
+### v1.1.0
+- 🪄 新增「提示詞擴寫」功能（Gemini 2.0 Flash）
+- 🌐 前端時間格式統一（本地時區自動格式化）
+- 🖼️ 行動裝置首/尾幀圖片顯示優化（不再被裁切）
+- 🧩 縮圖缺失時自動回退顯示原始輸入圖片
+- 🪟 新增 favicon 自動處理（支援 `favicon.ico` 或動態由 `favicon.png` 轉換）
+- 🔐 移除硬編碼主機路徑，導入 `COMFYUI_OUTPUT_DIR` 變數
+- ⚙️ 更彈性環境變數：可覆寫 `COMFYUI_HOST` / `COMFYUI_PORT` / `DATABASE_PATH`
+- 🛠️ 修正隊列頁面自動刷新後起始時間消失的問題
 
 ### v1.0.0
 - ✨ 新增雙模式影片生成（單圖 + 首尾幀）
