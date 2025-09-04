@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>任務詳細 · 影片生成器</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="icon" href="/favicon.ico">
+</head>
+<body>
+  
+<div class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="/"><span class="logo">▶</span> 影片生成器</a>
+    <div class="nav-links">
+      <a href="/" class="">首頁</a>
+      <a href="/queue" class="">排隊狀態</a>
+      <a href="/history" class="">歷史記錄</a>
+    </div>
+  </div>
+</div>
+
+  <div class="container" id="detailRoot">
+    <div class="page-header">
+      <div class="title"><i class="fa-solid fa-film"></i> 任務詳情</div>
+      <div class="subtitle">任務 ID：{{ task.task_id[:8] }}...　狀態與影片資訊如下</div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="fa-solid fa-film"></i> 任務：{{ task.task_id[:8] }}...</div>
+        {% set status_config = {
+            'completed': {'class': 'success', 'icon': 'circle-check', 'text': '已完成'},
+            'processing': {'class': 'warn', 'icon': 'gear', 'text': '處理中'},
+            'pending': {'class': 'warn', 'icon': 'clock', 'text': '排隊中'},
+            'failed': {'class': 'danger', 'icon': 'triangle-exclamation', 'text': '失敗'}
+        } %}
+        {% set config = status_config[task.status] %}
+        <div class="badge {{ config.class }}"><i class="fa-solid fa-{{ config.icon }}"></i> {{ config.text }}</div>
+      </div>
+
+      {% if task.status == 'completed' and task.output_filename %}
+      <div class="video-container" style="position:relative; background: #000; border-radius: 12px; overflow: hidden;">
+        <button class="btn secondary video-fullscreen-btn" onclick="toggleFullscreen()">
+          <i class="fa-solid fa-expand"></i>
+        </button>
+        <video id="mainVideo" controls preload="metadata" class="responsive-video">
+          <source src="/video/{{ task.output_filename }}" type="video/mp4">
+          您的瀏覽器不支援影片播放。
+        </video>
+      </div>
+      {% elif task.status == 'processing' %}
+      <div class="card" style="text-align:center; padding:40px 20px;">
+        <div class="processing-icon" style="margin-bottom:16px;">
+          <i class="fa-solid fa-gear fa-spin" style="font-size:48px; color:var(--primary);"></i>
+        </div>
+        <div style="font-size:20px; font-weight:700; margin-bottom:8px;">正在生成影片</div>
+        <div class="subtle">正在處理您的請求，請稍候...</div>
+        <div class="progress" style="margin-top:20px; max-width:300px; margin-left:auto; margin-right:auto;">
+          <div class="bar" style="width:60%; animation: pulse 2s infinite;"></div>
+        </div>
+        <div class="small subtle" style="margin-top:12px;">預估完成時間：2-5 分鐘</div>
+      </div>
+      {% elif task.status == 'pending' %}
+      <div class="card" style="text-align:center; padding:40px 20px;">
+        <div class="processing-icon" style="margin-bottom:16px;">
+          <i class="fa-solid fa-clock" style="font-size:48px; color:var(--warning);"></i>
+        </div>
+        <div style="font-size:20px; font-weight:700; margin-bottom:8px;">任務排隊中</div>
+        <div class="subtle">您的任務已加入處理佇列，等待系統處理</div>
+        <div class="small subtle" style="margin-top:12px;">排隊位置會根據系統負載動態調整</div>
+      </div>
+      {% elif task.status == 'failed' %}
+      <div class="card"><div style="color:#ffb1b7">生成失敗{{ ': ' + task.error_message if task.error_message else '' }}</div></div>
+      {% endif %}
+
+  <div class="grid detail-grid" style="gap:20px; margin-top:16px">
+        <div class="card">
+          <div class="card-title">影片資訊</div>
+          <div class="table">
+            <table class="table">
+              <tr><th>檔案名稱</th><td>{{ task.output_filename or '-' }}</td></tr>
+              <tr><th>生成模式</th><td>{{ '首尾幀' if task.generation_mode == 'first_last' else '單圖' }}</td></tr>
+              <tr><th>影片尺寸</th><td>{{ task.width }} × {{ task.height }}</td></tr>
+              <tr><th>影片時長</th><td>{{ '5秒' if task.duration == 81 else '8秒' }}</td></tr>
+              <tr><th>生成時間</th><td>
+                {% if task.completed_at and task.started_at %}
+                {{ ((task.completed_at | parse_datetime) - (task.started_at | parse_datetime)).total_seconds() | round(1) }} 秒
+                {% else %}-{% endif %}
+              </td></tr>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">操作</div>
+          <div class="row">
+            {% if task.status == 'completed' and task.output_filename %}
+              <a class="btn" href="/download/{{ task.output_filename }}"><i class="fa-solid fa-download"></i> 下載影片</a>
+              <button class="btn secondary" onclick="shareVideo()"><i class="fa-solid fa-share"></i> 分享</button>
+            {% endif %}
+            <button class="btn ghost" onclick="copyPrompt()"><i class="fa-regular fa-copy"></i> 複製提示詞</button>
+          </div>
+        </div>
+      </div>
+
+      {% if task.image_filename %}
+      <div class="card" style="margin-top:16px">
+        {% if task.generation_mode == 'first_last' and task.second_image_filename %}
+        <div class="card-title"><i class="fa-regular fa-image"></i> 輸入圖片</div>
+        <div class="grid input-images">
+          <div class="input-image">
+            <div class="small subtle" style="margin-bottom:8px;">首幀圖片</div>
+            <img class="input-image-img" src="/input/{{ task.image_filename }}" alt="首幀圖片">
+            <div class="small subtle" style="margin-top:6px">{{ task.image_filename }}</div>
+          </div>
+          <div class="input-image">
+            <div class="small subtle" style="margin-bottom:8px;">尾幀圖片</div>
+            <img class="input-image-img" src="/input/{{ task.second_image_filename }}" alt="尾幀圖片">
+            <div class="small subtle" style="margin-top:6px">{{ task.second_image_filename }}</div>
+          </div>
+        </div>
+        {% else %}
+        <div class="card-title"><i class="fa-regular fa-image"></i> 原始圖片</div>
+        <img src="/input/{{ task.image_filename }}" alt="原始圖片" style="max-height:420px;border-radius:12px;border:1px solid rgba(255,255,255,.08)">
+        <div class="small subtle" style="margin-top:6px">{{ task.image_filename }}</div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-title"><i class="fa-solid fa-timeline"></i> 處理時間軸</div>
+        <div class="list">
+          <div class="row"><b>任務建立</b> <span class="subtle small dt" data-dt="{{ task.created_at }}"></span></div>
+          {% if task.started_at %}<div class="row"><b>開始處理</b> <span class="subtle small dt" data-dt="{{ task.started_at }}"></span></div>{% endif %}
+          {% if task.completed_at %}<div class="row"><b>處理完成</b> <span class="subtle small dt" data-dt="{{ task.completed_at }}"></span></div>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">© 2025 Create Intelligens Inc. All Rights Reserved.</div>
+  </div>
+
+  <div id="appToast" class="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+  <script src="/static/js/app.js"></script>
+  <script>
+    window.__TASK_PROMPT__ = "{{ task.prompt|e }}";
+    window.__TASK_OUTPUT__ = "{{ task.output_filename|default('')|e }}";
+    
+    const currentTaskId = "{{ task.task_id }}";
+    const currentStatus = "{{ task.status }}";
+    
+    // 如果任務還在處理中，設置即時更新
+    if (currentStatus === 'processing' || currentStatus === 'pending') {
+      const socket = io();
+      
+      // 監聽任務完成事件
+      socket.on('task_completed', (data) => {
+        if (data.task_id === currentTaskId) {
+          showToast('任務完成！正在刷新頁面...');
+          setTimeout(() => {
+            location.reload();
+          }, 1000);
+        }
+      });
+      
+      // 監聽任務失敗事件
+      socket.on('task_failed', (data) => {
+        if (data.task_id === currentTaskId) {
+          showToast('任務失敗，正在刷新頁面...', 'danger');
+          setTimeout(() => {
+            location.reload();
+          }, 1000);
+        }
+      });
+      
+      // 每30秒自動刷新頁面檢查狀態
+      setInterval(() => {
+        console.log('自動檢查任務狀態...');
+        location.reload();
+      }, 30000);
+      
+      // 顯示處理中的提示
+      showToast('任務正在處理中，頁面將自動更新...', 'info');
+    }
+  </script>
+</body>
+</html>

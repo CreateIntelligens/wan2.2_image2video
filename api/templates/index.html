@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>影片生成器 · 首頁</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="preconnect" href="https://cdn.socket.io">
+  <link rel="icon" href="/favicon.ico">
+</head>
+<body>
+  
+<div class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="/"><span class="logo">▶</span> 影片生成器</a>
+    <div class="nav-links">
+      <a href="/" class="active">首頁</a>
+      <a href="/queue" class="">排隊狀態</a>
+      <a href="/history" class="">歷史記錄</a>
+    </div>
+  </div>
+</div>
+
+  <div class="container" id="homeRoot">
+    <div class="page-header">
+      <div class="title"><i class="fa-solid fa-wand-magic-sparkles"></i> 影片生成器</div>
+      <div class="subtitle">上傳圖片與提示詞，選擇尺寸與時長，開始生成你的風格影片</div>
+    </div>
+    <div class="grid cols-2">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="fa-solid fa-sliders"></i> 影片生成參數</div>
+        </div>
+        <form id="generateForm" enctype="multipart/form-data">
+          <label class="section-title">生成模式</label>
+          <div class="radio-group" style="margin-bottom: 16px;">
+            <label class="radio-option">
+              <input type="radio" name="mode" value="single" checked>
+              <span>單圖生成</span>
+              <div class="small subtle">上傳一張圖片生成影片</div>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="mode" value="first_last">
+              <span>首尾幀生成</span>
+              <div class="small subtle">上傳兩張圖片，第一張作為首幀，第二張作為尾幀</div>
+            </label>
+          </div>
+
+          <label class="section-title">提示詞 <span class="subtle">(詳細描述幫助生成)</span></label>
+          <textarea class="input" id="prompt" name="prompt" rows="4" placeholder="請描述您想要生成的影片內容，例如：女孩對著鏡頭微笑" required></textarea>
+
+          <div style="height:10px"></div>
+          
+          <!-- 單圖模式上傳區域 -->
+          <div id="singleImageUpload">
+            <label class="section-title">上傳圖片</label>
+            <div id="uploadArea" class="dropzone" tabindex="0">
+              <div class="subtle">支援 JPG/PNG/GIF，點擊或拖放檔案至此</div>
+              <div class="small">最佳比例會依選擇的尺寸自動適配</div>
+              <input type="file" id="imageFile" name="image" accept="image/*" class="hidden" required>
+            </div>
+            <div id="imagePreview"></div>
+          </div>
+
+          <!-- 首尾幀模式上傳區域 -->
+          <div id="firstLastImageUpload" class="hidden">
+            <div class="row">
+              <div style="flex:1; margin-right: 8px;">
+                <label class="section-title">首幀圖片</label>
+                <div id="firstImageArea" class="dropzone" tabindex="0">
+                  <div class="subtle">影片開始畫面</div>
+                  <div class="small">點擊或拖放檔案</div>
+                  <input type="file" id="firstImageFile" name="first_image" accept="image/*" class="hidden">
+                </div>
+                <div id="firstImagePreview"></div>
+              </div>
+              <div style="flex:1; margin-left: 8px;">
+                <label class="section-title">尾幀圖片</label>
+                <div id="lastImageArea" class="dropzone" tabindex="0">
+                  <div class="subtle">影片結束畫面</div>
+                  <div class="small">點擊或拖放檔案</div>
+                  <input type="file" id="lastImageFile" name="last_image" accept="image/*" class="hidden">
+                </div>
+                <div id="lastImagePreview"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:16px">
+            <div style="flex:1;min-width:180px">
+              <label class="section-title">影片尺寸</label>
+              <select id="dimensions" class="input" required>
+                <option value="480,832">480 x 832 (直向)</option>
+                <option value="832,480">832 x 480 (橫向)</option>
+              </select>
+            </div>
+            <div style="flex:1;min-width:180px">
+              <label class="section-title">影片時長</label>
+              <select id="duration" class="input" required>
+                <option value="81">5秒(約4分鐘處理時間)</option>
+                <option value="129">8秒(約7分鐘處理時間)</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="height:16px"></div>
+          <button class="btn full" id="generateBtn" type="submit"><i class="fa-solid fa-circle-play"></i> 開始生成影片</button>
+
+          <div id="statusCard" class="card hidden" style="margin-top:14px">
+            <div class="row" style="align-items:center">
+              <div id="statusTitle" style="font-weight:700">處理中...</div>
+              <span class="tag" id="statusMessage">正在準備任務...</span>
+            </div>
+            <div class="progress" style="margin-top:10px"><div id="progressBar" class="bar" style="width:0%"></div></div>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="fa-solid fa-server"></i> 即時排隊</div>
+          <div class="row small subtle">
+            <span>處理中：<b id="processingCount">{{ local_queue.processing if local_queue else 0 }}</b></span>
+            <span>排隊中：<b id="queueCount">{{ local_queue.pending if local_queue else 0 }}</b></span>
+          </div>
+        </div>
+        <div id="queueStatus" class="subtle">
+          {% if comfyui_queue %}
+            連線正常，系統運行中
+          {% else %}
+            正在檢查系統連線...
+          {% endif %}
+        </div>
+        <div class="section-title" style="margin-top:14px">最近任務</div>
+        <div id="recentTasks" class="list">
+          {% if recent_tasks %}
+            {% for task in recent_tasks[:5] %}
+            <div class="item task-item" data-task='{{ task | tojson | safe }}'>
+              <div class="thumb">
+                {% if task.thumbnail_filename %}
+                  <img src="/thumbnail/{{ task.thumbnail_filename }}" alt="縮圖">
+                {% else %}
+                  <img src="/input/{{ task.image_filename }}" alt="原始圖片" style="width:100%;height:100%;object-fit:cover;object-position:center;">
+                {% endif %}
+              </div>
+              <div style="display:flex; flex-direction:column; justify-content:space-between; min-height:84px;">
+                <div style="font-weight:700;">{{ task.prompt[:40] }}{% if task.prompt|length > 40 %}...{% endif %}</div>
+                <div class="row small subtle" style="margin-top:auto;">
+                  <span class="tag">{{ task.width }}×{{ task.height }}</span>
+                  <span class="tag">{{ '5秒' if task.duration == 81 else '8秒' }}</span>
+                  <span class="tag">{{ task.status }}</span>
+                </div>
+              </div>
+              <div class="row">
+                <a class="btn secondary" href="/task/{{ task.task_id }}">查看</a>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div class="subtle" style="text-align:center">暫無任務</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">© 2025 Create Intelligens Inc. All Rights Reserved.</div>
+  </div>
+
+  <div id="appToast" class="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+  <script src="/static/js/app.js"></script>
+  <script>
+    const socket = io();
+    let currentTaskId = null;
+
+    // 模式切換邏輯
+    document.querySelectorAll('input[name="mode"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        const mode = e.target.value;
+        document.getElementById('singleImageUpload').classList.toggle('hidden', mode !== 'single');
+        document.getElementById('firstLastImageUpload').classList.toggle('hidden', mode !== 'first_last');
+        
+        // 更新必填驗證
+        updateRequiredFields(mode);
+        
+        // 清空已上傳的圖片
+        clearImagePreviews();
+      });
+    });
+
+    function updateRequiredFields(mode) {
+      const imageFile = document.getElementById('imageFile');
+      const firstImageFile = document.getElementById('firstImageFile');
+      const lastImageFile = document.getElementById('lastImageFile');
+      
+      if (mode === 'single') {
+        imageFile.required = true;
+        firstImageFile.required = false;
+        lastImageFile.required = false;
+      } else {
+        imageFile.required = false;
+        firstImageFile.required = true;
+        lastImageFile.required = true;
+      }
+    }
+
+    function clearImagePreviews() {
+      document.getElementById('imagePreview').innerHTML = '';
+      document.getElementById('firstImagePreview').innerHTML = '';
+      document.getElementById('lastImagePreview').innerHTML = '';
+      document.getElementById('imageFile').value = '';
+      document.getElementById('firstImageFile').value = '';
+      document.getElementById('lastImageFile').value = '';
+    }
+
+    // 單圖模式上傳邏輯
+    const uploadArea = document.getElementById('uploadArea');
+    const imageFile = document.getElementById('imageFile');
+    uploadArea.addEventListener('click', ()=> imageFile.click());
+    uploadArea.addEventListener('dragover', e=>{ e.preventDefault(); uploadArea.classList.add('hover'); });
+    uploadArea.addEventListener('dragleave', ()=> uploadArea.classList.remove('hover'));
+    uploadArea.addEventListener('drop', e=>{ e.preventDefault(); uploadArea.classList.remove('hover'); if(e.dataTransfer.files.length){ imageFile.files = e.dataTransfer.files; previewImage(e.dataTransfer.files[0], 'imagePreview'); } });
+    imageFile.addEventListener('change', e=>{ if(e.target.files.length) previewImage(e.target.files[0], 'imagePreview'); });
+
+    // 首幀圖片上傳邏輯
+    const firstImageArea = document.getElementById('firstImageArea');
+    const firstImageFile = document.getElementById('firstImageFile');
+    firstImageArea.addEventListener('click', ()=> firstImageFile.click());
+    firstImageArea.addEventListener('dragover', e=>{ e.preventDefault(); firstImageArea.classList.add('hover'); });
+    firstImageArea.addEventListener('dragleave', ()=> firstImageArea.classList.remove('hover'));
+    firstImageArea.addEventListener('drop', e=>{ e.preventDefault(); firstImageArea.classList.remove('hover'); if(e.dataTransfer.files.length){ firstImageFile.files = e.dataTransfer.files; previewImage(e.dataTransfer.files[0], 'firstImagePreview'); } });
+    firstImageFile.addEventListener('change', e=>{ if(e.target.files.length) previewImage(e.target.files[0], 'firstImagePreview'); });
+
+    // 尾幀圖片上傳邏輯
+    const lastImageArea = document.getElementById('lastImageArea');
+    const lastImageFile = document.getElementById('lastImageFile');
+    lastImageArea.addEventListener('click', ()=> lastImageFile.click());
+    lastImageArea.addEventListener('dragover', e=>{ e.preventDefault(); lastImageArea.classList.add('hover'); });
+    lastImageArea.addEventListener('dragleave', ()=> lastImageArea.classList.remove('hover'));
+    lastImageArea.addEventListener('drop', e=>{ e.preventDefault(); lastImageArea.classList.remove('hover'); if(e.dataTransfer.files.length){ lastImageFile.files = e.dataTransfer.files; previewImage(e.dataTransfer.files[0], 'lastImagePreview'); } });
+    lastImageFile.addEventListener('change', e=>{ if(e.target.files.length) previewImage(e.target.files[0], 'lastImagePreview'); });
+
+    // 圖片預覽函數
+    function previewImage(file, previewId) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const preview = document.getElementById(previewId);
+        preview.innerHTML = `<img src="${e.target.result}" style="max-width: 100%; max-height: 200px; border-radius: 8px; margin-top: 8px;" alt="預覽圖片">`;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    const form = document.getElementById('generateForm');
+    form.addEventListener('submit', async (e)=>{ 
+      e.preventDefault();
+      const formData = new FormData(form);
+      const dims = document.getElementById('dimensions').value.split(',');
+      const duration = document.getElementById('duration').value;
+      formData.append('width', dims[0]);
+      formData.append('height', dims[1]);
+      formData.set('duration', duration);
+
+      document.getElementById('generateBtn').disabled = true;
+      updateStatus('上傳中','正在上傳圖片和參數...',10);
+      try{
+        const resp = await fetch('/api/generate', { method:'POST', body: formData });
+        const result = await resp.json();
+        if(result.success){
+          currentTaskId = result.task_id;
+          updateStatus('已提交', result.message || '任務已加入佇列', 20);
+          
+          // 顯示成功訊息後重導向到任務詳細頁面
+          showToast('任務已提交，正在跳轉到詳細頁面...');
+          setTimeout(() => {
+            window.location.href = `/task/${result.task_id}`;
+          }, 1500); // 1.5秒後重導向，讓用戶看到成功訊息
+        }else{ throw new Error(result.error || '提交失敗'); }
+      }catch(err){
+        updateStatus('錯誤', err.message, 0, true);
+        document.getElementById('generateBtn').disabled = false;
+      }
+    });
+
+    socket.on('task_completed', (data)=>{
+      if(data.task_id === currentTaskId){
+        updateStatus('完成','影片生成完成！',100);
+        document.getElementById('generateBtn').disabled = false;
+        showToast('點擊下載以保存影片');
+        setTimeout(()=>{
+          document.getElementById('statusCard').classList.add('hidden');
+          form.reset(); clearImagePreviews();
+        }, 2500);
+        loadRecentTasks();
+      }
+    });
+    socket.on('task_failed', (data)=>{
+      if(data.task_id === currentTaskId){
+        updateStatus('失敗', data.error || '生成失敗', 0, true);
+        document.getElementById('generateBtn').disabled = false;
+      }
+    });
+    socket.on('queue_update', (data)=>{ updateQueueDisplay(data); });
+
+    document.addEventListener('DOMContentLoaded', ()=>{
+      loadRecentTasks();
+      updateQueueStatus();
+      setInterval(updateQueueStatus, 5000);
+    });
+  </script>
+</body>
+</html>

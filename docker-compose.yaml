@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  comfyui-api:
+    build: ./api
+    container_name: comfyui-api
+    ports:
+      - "5005:5005"
+    volumes:
+      - ./api:/app                                                    # 代碼熱重載
+      - ./input:/app/input                                           # 用戶上傳
+      - ./output:/app/output                                         # 生成結果
+      - ./thumbnails:/app/thumbnails                                 # 縮圖
+      - ./database:/app/database                                     # 資料庫
+      - ./wan2.2_i2v_14b_single.json:/app/workflow.json:ro         # workflow模板
+      - ./wan2_2_i2v_14b_first_last.json:/app/workflow_first_last.json:ro  # 首尾幀workflow模板
+      - ${COMFYUI_PATH:-/home/hank/comfy/ComfyUI}/input:/app/comfyui_input
+      - ${COMFYUI_PATH:-/home/hank/comfy/ComfyUI}/output:/app/comfyui_output
+    environment:
+      - COMFYUI_HOST=host.docker.internal
+      - COMFYUI_PORT=8188
+      - FLASK_ENV=production
+      - DATABASE_PATH=/app/database/history.db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    depends_on: []
+    networks:
+      - comfyui-network
+
+networks:
+  comfyui-network:
+    driver: bridge

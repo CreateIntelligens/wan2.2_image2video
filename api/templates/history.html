@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>歷史記錄 · 影片生成器</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="icon" href="/favicon.ico">
+</head>
+<body>
+  
+<div class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="/"><span class="logo">▶</span> 影片生成器</a>
+    <div class="nav-links">
+      <a href="/" class="">首頁</a>
+      <a href="/queue" class="">排隊狀態</a>
+      <a href="/history" class="active">歷史記錄</a>
+    </div>
+  </div>
+</div>
+
+  <div class="container" id="historyRoot">
+    <div class="page-header">
+      <div class="title"><i class="fa-solid fa-clock-rotate-left"></i> 歷史記錄</div>
+      <div class="subtitle">瀏覽與搜尋你過去生成的影片，點縮圖即可預覽播放，按 R 快捷鍵可重新整理</div>
+      <div class="subtle small" style="margin-top:6px">最後更新：<span id="lastUpdate"></span></div>
+      <div style="margin-top:10px"><button class="btn secondary" onclick="refreshHistory()"><i class="fa-solid fa-rotate"></i> 重新整理</button></div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="fa-solid fa-magnifying-glass"></i> 搜尋歷史記錄</div>
+      </div>
+      <form action="/history" method="GET" class="row" style="gap:10px">
+        <input class="input" type="text" name="search" placeholder="搜尋提示詞或檔名..." value="{{ search or '' }}">
+        <button class="btn secondary" type="submit"><i class="fa-solid fa-search"></i> 搜尋</button>
+      </form>
+      <div class="row" style="margin-top:10px">
+        <button class="btn ghost small" onclick="filterByStatus('')"><i class="fa-solid fa-list"></i> 全部</button>
+        <button class="btn ghost small" onclick="filterByStatus('completed')"><i class="fa-solid fa-circle-check"></i> 已完成</button>
+        <button class="btn ghost small" onclick="filterByStatus('processing')"><i class="fa-solid fa-gear"></i> 處理中</button>
+        <button class="btn ghost small" onclick="filterByStatus('pending')"><i class="fa-solid fa-clock"></i> 排隊中</button>
+        <button class="btn ghost small" onclick="filterByStatus('failed')"><i class="fa-solid fa-triangle-exclamation"></i> 失敗</button>
+      </div>
+    </div>
+
+    {% if tasks %}
+  <div class="list task-grid" style="margin-top:16px">
+      {% for task in tasks %}
+      <div class="card task-item" data-task="{{ task | tojson | e }}">
+        <div class="row" style="align-items:flex-start">
+          <div class="thumb video-thumbnail" {% if task.status == 'completed' and task.output_filename %}onclick="playVideo('{{ task.output_filename }}','{{ task.prompt }}')"{% else %}onclick="location.href='/task/{{ task.task_id }}'"{% endif %}>
+            {% if task.thumbnail_filename %}
+              <img src="/thumbnail/{{ task.thumbnail_filename }}" alt="thumbnail">
+              {% if task.status == 'completed' and task.output_filename %}
+              <div class="play-overlay"><i class="fa-solid fa-play"></i></div>
+              {% endif %}
+            {% else %}
+              <img src="/input/{{ task.image_filename }}" alt="原始圖片" style="width:100%;height:100%;object-fit:cover;object-position:center;">
+            {% endif %}
+          </div>
+          <div style="flex:1">
+            <div class="row" style="justify-content:space-between">
+              <div>
+                <div style="font-weight:700">{{ task.prompt[:60] }}{% if task.prompt|length > 60 %}...{% endif %}</div>
+                <div class="meta"><i class="fa-regular fa-calendar"></i> <span class="dt" data-dt="{{ task.created_at }}"></span></div>
+              </div>
+              <div class="badge {{ 'success' if task.status=='completed' else 'warn' if task.status in ['pending','processing'] else 'danger' }}">
+                <i class="fa-solid {{ 'fa-circle-check' if task.status=='completed' else 'fa-clock' if task.status=='pending' else 'fa-gear' if task.status=='processing' else 'fa-triangle-exclamation' }}"></i>
+                {{ '已完成' if task.status=='completed' else '排隊中' if task.status=='pending' else '處理中' if task.status=='processing' else '失敗' }}
+              </div>
+            </div>
+            <div class="row small subtle" style="margin-top:6px">
+              <span class="tag">{{ task.width }}×{{ task.height }}</span>
+              <span class="tag">{{ '5秒' if task.duration == 81 else '8秒' }}</span>
+              <span class="tag">{{ '首尾幀' if task.generation_mode == 'first_last' else '單圖' }}</span>
+              <span class="tag">{{ task.status }}</span>
+            </div>
+            {% if task.status == 'failed' and task.error_message %}
+              <div class="small" style="color:#ffb1b7;margin-top:6px"><i class="fa-solid fa-bug"></i> {{ task.error_message }}</div>
+            {% endif %}
+            <div class="row" style="margin-top:10px">
+              <a class="btn secondary" href="/task/{{ task.task_id }}"><i class="fa-regular fa-eye"></i> 查看</a>
+              {% if task.status == 'completed' and task.output_filename %}
+              <a class="btn" href="/download/{{ task.output_filename }}"><i class="fa-solid fa-download"></i> 下載</a>
+              {% endif %}
+              <button class="btn ghost" onclick="deleteTask('{{ task.task_id }}','{{ task.prompt[:30] }}...')"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="card" style="margin-top:16px">
+      <div class="row" style="align-items:center;justify-content:center">
+        <i class="fa-regular fa-inbox" style="font-size:40px;opacity:.6"></i>
+        <div>
+          <div style="font-weight:700">沒有找到任務記錄</div>
+          {% if search %}
+            <div class="subtle">沒有找到包含「{{ search }}」的記錄</div>
+            <a class="btn" href="/history">查看所有記錄</a>
+          {% else %}
+            <div class="subtle">還沒有任何生成記錄，<a href="/">立即開始</a>！</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- 分頁資訊和導航 -->
+    {% if total_count > 0 %}
+    <div class="card" style="margin-top:16px">
+      <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div class="subtle">
+          <i class="fa-solid fa-list"></i> 
+          共 {{ total_count }} 個任務，第 {{ page }} / {{ total_pages }} 頁
+        </div>
+        <div class="row" style="gap:8px;align-items:center">
+          <span class="subtle small">跳轉到：</span>
+          <input type="number" id="jumpPage" min="1" max="{{ total_pages }}" value="{{ page }}" 
+                 style="width:60px;padding:4px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.12);background:#0c1226;color:var(--text);text-align:center">
+          <button class="btn ghost small" onclick="jumpToPage()">
+            <i class="fa-solid fa-arrow-right"></i>
+          </button>
+        </div>
+      </div>
+      
+      <!-- 分頁按鈕 -->
+      <div class="row" style="justify-content:center;gap:8px;flex-wrap:wrap">
+        <!-- 首頁 -->
+        {% if page > 1 %}
+        <a class="btn secondary small" href="?page=1{% if search %}&search={{ search }}{% endif %}{% if status %}&status={{ status }}{% endif %}" title="首頁">
+          <i class="fa-solid fa-angles-left"></i>
+        </a>
+        {% endif %}
+        
+        <!-- 上一頁 -->
+        {% if page > 1 %}
+        <a class="btn secondary" href="?page={{ page - 1 }}{% if search %}&search={{ search }}{% endif %}{% if status %}&status={{ status }}{% endif %}">
+          <i class="fa-solid fa-chevron-left"></i> 上一頁
+        </a>
+        {% endif %}
+        
+        <!-- 頁碼按鈕 -->
+        {% for p in range(start_page, end_page + 1) %}
+          {% if p == page %}
+            <span class="btn primary">{{ p }}</span>
+          {% else %}
+            <a class="btn ghost" href="?page={{ p }}{% if search %}&search={{ search }}{% endif %}{% if status %}&status={{ status }}{% endif %}">{{ p }}</a>
+          {% endif %}
+        {% endfor %}
+        
+        <!-- 下一頁 -->
+        {% if page < total_pages %}
+        <a class="btn secondary" href="?page={{ page + 1 }}{% if search %}&search={{ search }}{% endif %}{% if status %}&status={{ status }}{% endif %}">
+          下一頁 <i class="fa-solid fa-chevron-right"></i>
+        </a>
+        {% endif %}
+        
+        <!-- 末頁 -->
+        {% if page < total_pages %}
+        <a class="btn secondary small" href="?page={{ total_pages }}{% if search %}&search={{ search }}{% endif %}{% if status %}&status={{ status }}{% endif %}" title="末頁">
+          <i class="fa-solid fa-angles-right"></i>
+        </a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="footer">© 2025 Create Intelligens Inc. All Rights Reserved.</div>
+  </div>
+
+  <!-- Custom Video Modal -->
+  <div id="customVideoModal" class="video-modal-overlay hidden" style="display:none" role="dialog" aria-modal="true" aria-labelledby="videoModalTitle" aria-hidden="true">
+    <div class="video-modal-container">
+      <div class="video-modal-header">
+        <h3 id="videoModalTitle">影片播放</h3>
+        <button class="video-modal-close" onclick="closeVideoModal()">
+          <i class="fa-solid fa-times"></i>
+        </button>
+      </div>
+      <div class="video-modal-content">
+        <div id="videoPlayer"></div>
+      </div>
+      <div class="video-modal-footer">
+        <button class="btn secondary" onclick="closeVideoModal()">
+          <i class="fa-solid fa-times"></i> 關閉
+        </button>
+        <a href="#" class="btn" id="modalDownloadBtn">
+          <i class="fa-solid fa-download"></i> 下載
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div id="appToast" class="toast"></div>
+
+  <script src="/static/js/app.js"></script>
+  <script>
+    // 初始化時間顯示
+    document.getElementById('lastUpdate')?.replaceChildren(document.createTextNode(new Date().toLocaleString()));
+    
+    // 鍵盤快捷鍵
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'r' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        refreshHistory();
+      }
+      if (e.key === 'F5') {
+        e.preventDefault();
+        refreshHistory();
+      }
+    });
+
+    console.log('歷史記錄頁面已載入');
+    console.log('快捷鍵：R - 重新整理');
+  </script>
+</body>
+</html>

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>排隊狀態 · 影片生成器</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="icon" href="/favicon.ico">
+</head>
+<body>
+  
+<div class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="/"><span class="logo">▶</span> 影片生成器</a>
+    <div class="nav-links">
+      <a href="/" class="">首頁</a>
+      <a href="/queue" class="active">排隊狀態</a>
+      <a href="/history" class="">歷史記錄</a>
+    </div>
+  </div>
+</div>
+
+  <div class="container" id="queueRoot">
+    <div class="page-header">
+      <div class="title"><i class="fa-solid fa-server"></i> 排隊狀態</div>
+      <div class="subtitle">查看系統即時佇列與處理進度，按 R 快捷鍵可重新整理</div>
+      <div class="subtle small" style="margin-top:6px">最後更新：<span id="lastUpdate"></span></div>
+      <div style="margin-top:10px"><button class="btn secondary" onclick="refreshStatus()"><i class="fa-solid fa-rotate"></i> 重新整理</button></div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-icon"><i class="fa-solid fa-gear"></i></div>
+        <div class="stat-body">
+          <div class="stat-title">處理中</div>
+          <div class="stat-number" id="processingCount">{{ local_queue.processing if local_queue else 0 }}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon"><i class="fa-regular fa-clock"></i></div>
+        <div class="stat-body">
+          <div class="stat-title">排隊中</div>
+          <div class="stat-number" id="pendingCount">{{ local_queue.pending if local_queue else 0 }}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon"><i class="fa-solid fa-server"></i></div>
+        <div class="stat-body">
+          <div class="stat-title">服務處理中</div>
+          <div class="stat-number" id="comfyuiRunning">{{ comfyui_queue.queue_running|length if comfyui_queue and comfyui_queue.queue_running else 0 }}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon"><i class="fa-solid fa-list"></i></div>
+        <div class="stat-body">
+          <div class="stat-title">服務排隊中</div>
+          <div class="stat-number" id="comfyuiPending">{{ comfyui_queue.queue_pending|length if comfyui_queue and comfyui_queue.queue_pending else 0 }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid cols-2" style="margin-top:16px">
+      <div class="card">
+        <div class="card-title"><i class="fa-solid fa-gear"></i> 處理中的任務 <span class="tag">{{ processing_tasks|length }}</span></div>
+        <div class="list">
+          {% if processing_tasks %}
+          {% for task in processing_tasks %}
+          <div class="item">
+            <div class="thumb">
+              {% if task.thumbnail_filename %}
+                <img src="/thumbnail/{{ task.thumbnail_filename }}">
+              {% elif task.image_filename %}
+                <img src="/input/{{ task.image_filename }}" style="object-fit: cover;">
+              {% else %}
+                <div class="processing-icon"><i class="fa-solid fa-gear fa-spin"></i></div>
+              {% endif %}
+            </div>
+            <div>
+              <div style="font-weight:700">{{ task.prompt[:40] }}{% if task.prompt|length > 40 %}...{% endif %}</div>
+              <div class="row small subtle">
+                <span class="tag">{{ task.width }}×{{ task.height }}</span>
+                <span class="tag">{{ '5秒' if task.duration == 81 else '8秒' }}</span>
+                <span class="tag">開始：<span class="dt" data-dt="{{ task.started_at }}">{{ task.started_at if task.started_at else '-' }}</span></span>
+              </div>
+            </div>
+            <a class="btn secondary" href="/task/{{ task.task_id }}"><i class="fa-regular fa-eye"></i> 查看</a>
+          </div>
+          {% endfor %}
+          {% else %}
+          <div class="subtle">目前沒有處理中的任務</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><i class="fa-regular fa-clock"></i> 排隊中的任務 <span class="tag">{{ pending_tasks|length }}</span></div>
+        <div class="list">
+          {% if pending_tasks %}
+          {% for task in pending_tasks %}
+          <div class="item">
+            <div class="thumb">
+              {% if task.thumbnail_filename %}
+                <img src="/thumbnail/{{ task.thumbnail_filename }}">
+              {% elif task.image_filename %}
+                <img src="/input/{{ task.image_filename }}" style="object-fit: cover;">
+              {% else %}
+                <div class="processing-icon"><i class="fa-regular fa-clock"></i></div>
+              {% endif %}
+            </div>
+            <div>
+              <div style="font-weight:700">{{ task.prompt[:40] }}{% if task.prompt|length > 40 %}...{% endif %}</div>
+              <div class="row small subtle">
+                <span class="tag">{{ task.width }}×{{ task.height }}</span>
+                <span class="tag">{{ '5秒' if task.duration == 81 else '8秒' }}</span>
+                <span class="tag">預估等待：{{ task.estimated_wait_time }} 分鐘</span>
+              </div>
+            </div>
+            <a class="btn secondary" href="/task/{{ task.task_id }}"><i class="fa-regular fa-eye"></i> 查看</a>
+          </div>
+          {% endfor %}
+          {% else %}
+          <div class="subtle">目前沒有排隊中的任務</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">© 2025 Create Intelligens Inc. All Rights Reserved.</div>
+  </div>
+
+  <div id="appToast" class="toast"></div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+  <script src="/static/js/app.js"></script>
+  <script>
+    // WebSocket 連接
+    const socket = io();
+
+    socket.on('queue_update', (data) => {
+      updateQueueDisplay(data);
+    });
+
+    socket.on('task_completed', (data) => {
+      setTimeout(refreshStatus, 1000);
+    });
+
+    socket.on('task_failed', (data) => {
+      setTimeout(refreshStatus, 1000);
+    });
+
+    // 自動重新整理
+    let autoRefreshInterval = setInterval(refreshStatus, 5000);
+
+    // 頁面可見性變化時的處理
+    document.addEventListener('visibilitychange', function() {
+      if (document.hidden) {
+        clearInterval(autoRefreshInterval);
+      } else {
+        refreshStatus();
+        autoRefreshInterval = setInterval(refreshStatus, 5000);
+      }
+    });
+
+    // 鍵盤快捷鍵
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'r' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        refreshStatus();
+      }
+      if (e.key === 'F5') {
+        e.preventDefault();
+        refreshStatus();
+      }
+    });
+
+    // 初始化時間顯示
+    document.getElementById('lastUpdate')?.replaceChildren(document.createTextNode(new Date().toLocaleString()));
+    
+    console.log('排隊狀態頁面已載入，每5秒自動重新整理');
+    console.log('快捷鍵：R - 重新整理');
+  </script>
+</body>
+</html>

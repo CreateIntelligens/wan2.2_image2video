@@ -1,0 +1,10 @@
+Flask==2.3.3
+Flask-SocketIO==5.3.6
+requests==2.31.0
+Pillow==10.0.1
+opencv-python-headless==4.8.1.78
+python-socketio==5.9.0
+websocket-client==1.6.4
+uuid==1.30
+python-dotenv==1.0.0
+numpy<2.0.0
