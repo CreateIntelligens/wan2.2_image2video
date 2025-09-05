@@ -228,11 +228,19 @@ function fallbackCopyTextToClipboard(text){
   navigator.clipboard?.writeText(text).then(()=>showToast('已複製'),()=>showToast('複製失敗','danger'));
 }
 function shareVideo(){
-  const url = location.origin + '/video/'+ (window.__TASK_OUTPUT__||'');
-  const dl = location.origin + '/download/'+ (window.__TASK_OUTPUT__||'');
-  document.getElementById('shareUrl').value = url;
-  document.getElementById('downloadUrl').value = dl;
-  new bootstrap.Modal(document.getElementById('shareModal')).show();
+  const fn = (window.__TASK_OUTPUT__||'');
+  if(!fn){ showToast('尚無影片'); return; }
+  const url = location.origin + '/video/'+ fn;
+  const dl = location.origin + '/download/'+ fn;
+  const su = document.getElementById('shareUrl');
+  const du = document.getElementById('downloadUrl');
+  if(su) su.value = url; if(du) du.value = dl;
+  const overlay = document.getElementById('shareOverlay');
+  if(overlay){ overlay.classList.add('show'); document.body.style.overflow='hidden'; }
+}
+function closeShare(){
+  const overlay = document.getElementById('shareOverlay');
+  if(overlay){ overlay.classList.remove('show'); document.body.style.overflow=''; }
 }
 function toggleFullscreen(){
   const v = document.getElementById('mainVideo');

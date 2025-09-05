@@ -175,6 +175,50 @@ textarea{resize:vertical}
 .table tr td:first-child{border-top-left-radius:12px;border-bottom-left-radius:12px}
 .table tr td:last-child{border-top-right-radius:12px;border-bottom-right-radius:12px}
 
+/* Ensure table cells use full available width and no unexpected shrink */
+.table td{width:auto;}
+
+/* Unify action buttons inside tables */
+.table .row .btn{min-height:44px; line-height:1.1; font-size:15px;}
+.table .row .btn.secondary{background:#132038;}
+.table .row .btn.secondary:hover{filter:brightness(1.08)}
+
+/* Fix Bootstrap modal not overlaying (override potential global styles) */
+.modal{display:none;}
+.modal.show{display:block;}
+.modal.fade .modal-dialog{transition:transform .25s ease, opacity .25s ease; transform:translateY(20px); opacity:0;}
+.modal.fade.show .modal-dialog{transform:translateY(0); opacity:1;}
+.modal-content{background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02)) !important; border:1px solid rgba(255,255,255,.1) !important;}
+
+/* Share modal inputs */
+#shareModal input{font-size:14px;}
+
+/* Ensure detail grid cards stretch full width of column */
+.detail-grid{align-items:stretch;}
+.detail-grid > .card{width:100%;height:100%;display:flex;flex-direction:column;}
+
+/* Prompt box styling */
+.prompt-box{flex:1;overflow:auto;background:rgba(255,255,255,.04);padding:14px 16px;border-radius:10px;font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word;min-height:260px}
+.prompt-actions{margin-top:10px;display:flex;gap:10px}
+
+/* Share overlay */
+.share-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.76);backdrop-filter:blur(6px);z-index:5000;padding:30px}
+.share-overlay.show{display:flex}
+.share-box{width:100%;max-width:720px;background:#141b2a;border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:28px;box-shadow:none;position:relative;display:flex;flex-direction:column;gap:22px}
+.share-box h3{margin:0;font-size:20px;font-weight:700;display:flex;align-items:center;gap:10px}
+.share-close{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:var(--text);cursor:pointer}
+.share-close:hover{background:rgba(255,255,255,.12)}
+.share-row{display:grid;grid-template-columns:120px 1fr 60px;gap:14px;align-items:center}
+.share-row input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:#0c1226;color:var(--text);font-size:14px}
+.share-actions{display:none}
+
+@media (max-width: 991px){
+  .detail-grid{grid-template-columns:1fr !important}
+  .share-row{grid-template-columns:1fr;}
+  .share-row label{font-size:13px}
+  .share-row input{font-size:13px}
+}
+
 /* Responsive video styles */
 .responsive-video {
   width: 100%;
